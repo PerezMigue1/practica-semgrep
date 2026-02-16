@@ -1,5 +1,7 @@
 # Práctica: Aplicación de pruebas SAST en módulos críticos de un sistema e-commerce
 
+**Repositorio:** https://github.com/PerezMigue1/practica-semgrep
+
 ## Objetivo
 
 Detectar y corregir vulnerabilidades en el código de una tienda en línea utilizando una herramienta SAST (Static Application Security Testing), demostrando **concepto**, **alcance**, **momento de aplicación** y **módulos** donde se usa.

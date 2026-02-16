@@ -1,3 +1,4 @@
+
 /**
  * Módulo Carrito - VERSIÓN VULNERABLE para práctica SAST
  * Vulnerabilidad: uso de dangerouslySetInnerHTML con datos no sanitizados (XSS)

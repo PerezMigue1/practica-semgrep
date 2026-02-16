@@ -4,12 +4,8 @@
  * eval(), falta de validación. Usar solo con fines educativos.
  */
 const express = require('express');
-const cookieParser = require('cookie-parser');
-const csurf = require('csurf');
 const app = express();
 app.use(express.json());
-app.use(cookieParser());
-app.use(csurf({ cookie: true }));
 
 // VULNERABILIDAD: Credenciales y secretos hardcodeados (detectados por SAST)
 const ADMIN_USER = 'admin@tienda.com';

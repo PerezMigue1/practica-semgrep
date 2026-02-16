@@ -32,7 +32,7 @@ Referencia: [Scan local repositories and upload findings](https://semgrep.dev/do
 
 ## 1. Módulo Login / Credenciales — backend/server.js
 
-**Líneas mal:** 11-15 (secretos hardcodeados)
+**Líneas mal:** 11-14 (secretos hardcodeados)
 
 **Reemplazar:**
 ```javascript
@@ -54,7 +54,7 @@ const DB_PASSWORD = process.env.DB_PASSWORD || '';
 
 ## 2. Módulo Búsqueda de usuario (SQL Injection) — backend/server.js
 
-**Línea mal:** 42 (concatenación en la consulta SQL)
+**Línea mal:** 41 (concatenación en la consulta SQL)
 
 **Reemplazar:**
 ```javascript
@@ -83,7 +83,7 @@ const email = (req.query.email || '').toString().slice(0, 255);
 
 ## 3. Módulo Registro — backend/server.js
 
-**Líneas mal:** 54-61 (sin validación de email, contraseña ni longitudes)
+**Líneas mal:** 53-62 (sin validación de email, contraseña ni longitudes)
 
 **Reemplazar:** todo el bloque de `app.post('/api/registro', ...)` que usa directo `nombre`, `email`, `password` del body.
 
@@ -113,7 +113,7 @@ app.post('/api/registro', (req, res) => {
 
 ## 4. Módulo Carrito (eval) — backend/server.js
 
-**Líneas mal:** 66-71 (uso de `eval` con datos del usuario)
+**Líneas mal:** 65-70 (uso de `eval` con datos del usuario)
 
 **Reemplazar:**
 ```javascript
@@ -183,14 +183,41 @@ Opcional: eliminar la función `mostrarComentario` si ya no se usa.
 
 ---
 
+## 7. Módulo CSRF — backend/server.js
+
+**Qué marca Semgrep:** no se detecta middleware CSRF en la aplicación Express (regla `express-check-csurf-middleware-usage`).
+
+**Dónde corregir:** al inicio del archivo, después de `app.use(express.json());`.
+
+**Añadir:** los requires y el uso del middleware:
+
+```javascript
+const cookieParser = require('cookie-parser');
+const csurf = require('csurf');
+```
+
+(junto a `const express = require('express');`)
+
+y después de `app.use(express.json());`:
+
+```javascript
+app.use(cookieParser());
+app.use(csurf({ cookie: true }));
+```
+
+Las dependencias `cookie-parser` y `csurf` ya están en `package.json`; si no, instala con `npm install cookie-parser csurf`. Referencia de código corregido: `backend/server-seguro.js` (ahí ya está aplicado).
+
+---
+
 ## Resumen
 
 | Módulo        | Archivo                  | Líneas / zona      | Cambio principal                          |
 |---------------|--------------------------|--------------------|-------------------------------------------|
-| Login/Credenciales | backend/server.js  | 11-15              | Secretos → variables de entorno          |
-| Búsqueda usuario   | backend/server.js  | 42, 47             | Sin concatenación SQL; limitar `email`    |
-| Registro          | backend/server.js  | 54-61              | Validar email, contraseña y longitudes     |
-| Carrito           | backend/server.js  | 66-71              | `eval` → `JSON.parse` + validación       |
+| Login/Credenciales | backend/server.js  | 11-14              | Secretos → variables de entorno          |
+| Búsqueda usuario   | backend/server.js  | 41, 47             | Sin concatenación SQL; limitar `email`    |
+| Registro          | backend/server.js  | 53-62              | Validar email, contraseña y longitudes     |
+| Carrito           | backend/server.js  | 65-70              | `eval` → `JSON.parse` + validación       |
+| CSRF             | backend/server.js  | inicio (middleware)| Añadir cookie-parser y csurf             |
 | Login frontend    | frontend/LoginVulnerable.js | 8, 16-19   | Sin contraseña en cliente; auth en backend |
 | Carrito frontend  | frontend/CarritoVulnerable.js | 25         | `dangerouslySetInnerHTML` → `{comentario}` |
 
