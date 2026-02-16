@@ -1,0 +1,4 @@
+# Práctica SAST - Semgrep
+# Para el análisis usar: semgrep scan --config auto .
+# La práctica se centra en: secretos, eval, SQLi, validación, XSS.
+# La regla CSRF se excluye en ejecutar-semgrep.ps1 para no marcar falta de middleware CSRF.

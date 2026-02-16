@@ -1,0 +1,249 @@
+# Instrucciones SAST – Líneas incorrectas y correcciones por módulo
+
+Después de ejecutar el escaneo (local o con Semgrep Cloud), corrige cada módulo así.
+
+---
+
+## Usar Semgrep Cloud (opcional / si lo pide la maestra)
+
+Si debes usar el proyecto de la institución en Semgrep Cloud:
+https://semgrep.dev/orgs/20230091_uthh_edu_mx/projects/scanning
+
+1. **Iniciar sesión** (solo la primera vez):
+   ```powershell
+   semgrep login
+   ```
+   Se abrirá el navegador para que actives el CLI con tu cuenta de Semgrep (la de tu org 20230091_uthh_edu_mx).
+
+2. **Escaneo que sube resultados a la nube:**
+   Desde la carpeta del proyecto:
+   ```powershell
+   cd "C:\Users\Miguel Angel\practica-sast"
+   semgrep ci
+   ```
+   `semgrep ci` usa la configuración de tu organización y **sube los hallazgos al dashboard** de Semgrep Cloud. Ahí podrás ver los resultados en el proyecto "scanning".
+
+3. **Primer escaneo (código vulnerable):** ejecuta `semgrep ci` → en la web verás todos los hallazgos.
+4. **Segundo escaneo (código corregido):** después de aplicar las correcciones (o de analizar solo la versión segura), vuelve a ejecutar `semgrep ci`; los hallazgos deberían bajar o desaparecer en el dashboard.
+
+Referencia: [Scan local repositories and upload findings](https://semgrep.dev/docs/deployment/local-to-scp-scans).
+
+---
+
+## 1. Módulo Login / Credenciales — backend/server.js
+
+**Líneas mal:** 11-15 (secretos hardcodeados)
+
+**Reemplazar:**
+```javascript
+const ADMIN_USER = 'admin@tienda.com';
+const ADMIN_PASSWORD = 'Admin123!';
+const STRIPE_SECRET_KEY = 'sk_live_abc123xyz789secreto';
+const DB_PASSWORD = 'root123';
+```
+
+**Por:**
+```javascript
+const ADMIN_USER = process.env.ADMIN_USER || '';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || '';
+const DB_PASSWORD = process.env.DB_PASSWORD || '';
+```
+
+---
+
+## 2. Módulo Búsqueda de usuario (SQL Injection) — backend/server.js
+
+**Línea mal:** 42 (concatenación en la consulta SQL)
+
+**Reemplazar:**
+```javascript
+const querySimulada = "SELECT * FROM usuarios WHERE email = '" + email + "'";
+```
+
+**Por:** no concatenar la entrada del usuario. Dentro de `buscarUsuarioPorEmail` devolver solo el email sanitizado, por ejemplo:
+```javascript
+return { email: String(email).slice(0, 255) };
+```
+(Eliminar la variable `querySimulada` y cualquier uso de concatenación con `email` en una query.)
+
+**Línea mal:** 47 (entrada sin limitar)
+
+**Reemplazar:**
+```javascript
+const email = req.query.email || '';
+```
+
+**Por:**
+```javascript
+const email = (req.query.email || '').toString().slice(0, 255);
+```
+
+---
+
+## 3. Módulo Registro — backend/server.js
+
+**Líneas mal:** 54-61 (sin validación de email, contraseña ni longitudes)
+
+**Reemplazar:** todo el bloque de `app.post('/api/registro', ...)` que usa directo `nombre`, `email`, `password` del body.
+
+**Por:** validar y limitar antes de usar:
+```javascript
+app.post('/api/registro', (req, res) => {
+  const { nombre, email, password } = req.body;
+  const nombreSafe = (nombre && String(nombre).trim().slice(0, 100)) || '';
+  const emailSafe = (email && String(email).trim().slice(0, 254)) || '';
+  if (!emailSafe || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailSafe)) {
+    return res.status(400).json({ message: 'Email inválido' });
+  }
+  if (!password || password.length < 8) {
+    return res.status(400).json({ message: 'Contraseña debe tener al menos 8 caracteres' });
+  }
+  usuarios.push({
+    id: usuarios.length + 1,
+    nombre: nombreSafe,
+    email: emailSafe,
+    passwordHash: 'hash_' + password
+  });
+  res.json({ ok: true, message: 'Usuario registrado' });
+});
+```
+
+---
+
+## 4. Módulo Carrito (eval) — backend/server.js
+
+**Líneas mal:** 66-71 (uso de `eval` con datos del usuario)
+
+**Reemplazar:**
+```javascript
+app.post('/api/carrito/parsear', (req, res) => {
+  const { datos } = req.body;
+  let items;
+  items = eval('(' + datos + ')');
+  if (!Array.isArray(items)) items = [];
+  res.json({ items, total: items.length });
+});
+```
+
+**Por:**
+```javascript
+app.post('/api/carrito/parsear', (req, res) => {
+  const { datos } = req.body;
+  if (typeof datos !== 'string') {
+    return res.status(400).json({ error: 'Datos debe ser string JSON' });
+  }
+  let items;
+  try {
+    items = JSON.parse(datos);
+    if (!Array.isArray(items)) items = [];
+  } catch (e) {
+    return res.status(400).json({ error: 'JSON inválido' });
+  }
+  res.json({ items, total: items.length });
+});
+```
+
+---
+
+## 5. Módulo Login (frontend) — frontend/LoginVulnerable.js
+
+**Línea mal:** 8 (contraseña en el cliente)
+
+**Reemplazar:**
+```javascript
+const DEFAULT_ADMIN_PASS = 'admin123';
+```
+
+**Por:** eliminar esa constante. No debe haber contraseñas ni secretos en el frontend.
+
+**Líneas mal:** 16-19 (comparación con contraseña en el cliente)
+
+**Reemplazar:** la lógica que compara `password === DEFAULT_ADMIN_PASS` y redirige.
+
+**Por:** enviar email y contraseña al backend (por ejemplo `POST /api/login`) y, según la respuesta, redirigir o mostrar error. La validación debe hacerse solo en el servidor.
+
+---
+
+## 6. Módulo Carrito (XSS) — frontend/CarritoVulnerable.js
+
+**Línea mal:** 25 (HTML sin sanitizar desde entrada del usuario)
+
+**Reemplazar:**
+```javascript
+<div dangerouslySetInnerHTML={mostrarComentario()} />
+```
+
+**Por:**
+```javascript
+<div>{comentario}</div>
+```
+
+Opcional: eliminar la función `mostrarComentario` si ya no se usa.
+
+---
+
+## Resumen
+
+| Módulo        | Archivo                  | Líneas / zona      | Cambio principal                          |
+|---------------|--------------------------|--------------------|-------------------------------------------|
+| Login/Credenciales | backend/server.js  | 11-15              | Secretos → variables de entorno          |
+| Búsqueda usuario   | backend/server.js  | 42, 47             | Sin concatenación SQL; limitar `email`    |
+| Registro          | backend/server.js  | 54-61              | Validar email, contraseña y longitudes     |
+| Carrito           | backend/server.js  | 66-71              | `eval` → `JSON.parse` + validación       |
+| Login frontend    | frontend/LoginVulnerable.js | 8, 16-19   | Sin contraseña en cliente; auth en backend |
+| Carrito frontend  | frontend/CarritoVulnerable.js | 25         | `dangerouslySetInnerHTML` → `{comentario}` |
+
+---
+
+## Una vez corregido, ¿cómo sé que ya está? ¿Que esto funciona?
+
+### 1. Saber que las vulnerabilidades ya no están (SAST)
+
+Usa siempre el mismo comando (CSRF ya está corregido en el código con el middleware en ambos servidores):
+
+```powershell
+cd "C:\Users\Miguel Angel\practica-sast"
+semgrep scan --config auto .
+```
+
+- **Primer escaneo (código vulnerable):** se analiza todo; los hallazgos salen en `backend/server.js` y en el frontend.
+- **Segundo escaneo (para ver 0 hallazgos):** como `server.js` lo dejas vulnerable a propósito, escanea solo la versión segura y el frontend:
+```powershell
+semgrep scan --config auto backend/server-seguro.js frontend/
+```
+Así el reporte solo incluye el código corregido y debería salir sin hallazgos.
+
+- **Antes de corregir:** Semgrep mostraba varios hallazgos (secretos, eval, SQL injection, XSS, etc.).
+- **Después de corregir:** Esos mismos hallazgos **no deberían aparecer** (o serán muchos menos). Si la lista de resultados es vacía o ya no sale nada en `backend/server.js`, `LoginVulnerable.js` ni `CarritoVulnerable.js` para esas reglas, **ya está corregido** desde el punto de vista SAST.
+
+En la práctica: “corregido” = segundo escaneo sin (o con menos) hallazgos en esos archivos.
+
+### 2. Saber que la aplicación sigue funcionando
+
+Para comprobar que el backend no se rompió con los cambios:
+
+1. En la carpeta `backend` instala dependencias (solo la primera vez):
+   ```powershell
+   cd backend
+   npm install
+   ```
+
+2. Arranca el servidor:
+   - **Versión vulnerable** (server.js, no lo borres): `node server.js` o `npm start`
+   - **Versión corregida** (sin tocar server.js): `node server-seguro.js` o `npm run start:seguro`
+
+3. Con el servidor en marcha, prueba desde el navegador o con una herramienta como Postman/Insomnia:
+   - **Login:** `POST http://localhost:3001/api/login` con body `{ "email": "admin@tienda.com", "password": "Admin123!" }` (o las credenciales que tengas en `.env` si usas variables de entorno).
+   - **Registro:** `POST http://localhost:3001/api/registro` con `{ "nombre": "Test", "email": "test@test.com", "password": "12345678" }`.
+   - **Carrito:** `POST http://localhost:3001/api/carrito/parsear` con `{ "datos": "[{\"id\":1,\"nombre\":\"Producto\"}]" }`.
+
+Si obtienes respuestas JSON (token, “Usuario registrado”, lista de items) y no errores 500, **la aplicación funciona** después de las correcciones.
+
+**Resumen:** “Ya está” = segundo escaneo Semgrep sin esos hallazgos. “Funciona” = servidor arranca y los endpoints responden bien.
+
+---
+
+**Usar la versión segura sin tocar server.js:** en la carpeta `backend` ejecuta `node server-seguro.js` o `npm run start:seguro`. Así `server.js` sigue siendo el código vulnerable para el primer escaneo y `server-seguro.js` es la versión corregida para probar y para el segundo escaneo.
+
+Referencia de código ya corregido (backend): `backend/server-seguro.js`.

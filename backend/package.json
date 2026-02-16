@@ -1,0 +1,15 @@
+{
+  "name": "ecommerce-backend-vulnerable",
+  "version": "1.0.0",
+  "description": "Backend simulado de e-commerce con vulnerabilidades para práctica SAST",
+  "main": "server.js",
+  "dependencies": {
+    "cookie-parser": "^1.4.6",
+    "csurf": "^1.11.0",
+    "express": "^4.18.2"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "semgrep": "semgrep scan --config auto ."
+  }
+}
